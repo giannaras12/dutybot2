@@ -278,7 +278,7 @@ async def end_duty_session(user, auto=True, reason="No response"):
     duty = ACTIVE_DUTIES.pop(user.id)
     total_time = datetime.utcnow() - duty['start_time']
     total_minutes = int(total_time.total_seconds() // 60)
-    earned_points = total_minutes // 8
+    earned_points = total_minutes // 4
 
     uid = str(user.id)
     points[uid] = points.get(uid, 0) + earned_points
