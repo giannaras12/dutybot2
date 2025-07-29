@@ -24,6 +24,7 @@ def keep_alive():
 
 # --- Configuration ---
 AUTHORIZED_MODS_FILE = "authorized_mods.json"
+POINTS_FILE = "points.json"
 ACTIVE_DUTIES = {}
 MAX_DUTY_DURATION = timedelta(hours=12)
 
@@ -50,6 +51,18 @@ def save_authorized_mods(mods):
     with open(AUTHORIZED_MODS_FILE, 'w') as f:
         json.dump(mods, f)
 
+def load_points():
+    try:
+        with open(POINTS_FILE, 'r') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return {}
+
+def save_points(points):
+    with open(POINTS_FILE, 'w') as f:
+        json.dump(points, f)
+
+points = load_points()
 authorized_mods = load_authorized_mods()
 
 # --- Checks ---
@@ -62,7 +75,7 @@ def is_authorized_mod(user_id: int):
 # --- Reminder View ---
 class ReminderView(View):
     def __init__(self, user_id):
-        super().__init__(timeout=120)  # 2 minutes
+        super().__init__(timeout=120)
         self.user_id = user_id
         self.responded = False
 
@@ -202,9 +215,28 @@ async def endduty(interaction: Interaction):
     await end_duty_session(interaction.user, auto=False)
     await interaction.response.send_message("Duty ended.", ephemeral=True)
 
+@tree.command(name="total", description="View a user's total points")
+async def total(interaction: Interaction, user_id: str):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
+    try:
+        uid = str(int(user_id))
+        user_points = points.get(uid, 0)
+        await interaction.response.send_message(f"<@{uid}> has **{user_points}** points.", ephemeral=True)
+    except ValueError:
+        await interaction.response.send_message("Invalid user ID.", ephemeral=True)
+
+@tree.command(name="resetpoints", description="Reset all points (Admin only)")
+async def resetpoints(interaction: Interaction):
+    if not is_admin(interaction):
+        return await interaction.response.send_message("You are not authorized to use this command.", ephemeral=True)
+    points.clear()
+    save_points(points)
+    await interaction.response.send_message("All points have been reset.", ephemeral=True)
+
 # --- Reminder Logic ---
 async def schedule_reminder(user):
-    await asyncio.sleep(random.randint(1200, 1800))  # 3–5 minutes
+    await asyncio.sleep(random.randint(1200, 1800))
     if user.id not in ACTIVE_DUTIES:
         return
 
@@ -244,6 +276,14 @@ async def end_duty_session(user, auto=True, reason="No response"):
         return
 
     duty = ACTIVE_DUTIES.pop(user.id)
+    total_time = datetime.utcnow() - duty['start_time']
+    total_minutes = int(total_time.total_seconds() // 60)
+    earned_points = total_minutes // 8
+
+    uid = str(user.id)
+    points[uid] = points.get(uid, 0) + earned_points
+    save_points(points)
+
     embed = Embed(
         title="Duty Auto-Ended" if auto else "Duty Ended",
         color=discord.Color.red()
@@ -251,29 +291,22 @@ async def end_duty_session(user, auto=True, reason="No response"):
     embed.add_field(name="User", value=f"{user} ({user.id})")
     embed.add_field(name="Start Time", value=duty['start_time'].strftime('%A, %d %B %Y %H:%M %p'))
     embed.add_field(name="End Time", value=datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p'))
-    embed.add_field(name="Total Duration", value=str(datetime.utcnow() - duty['start_time'])[:-7])
+    embed.add_field(name="Total Duration", value=str(total_time)[:-7])
     embed.add_field(name="Times Continued", value=str(duty['continues']))
+    embed.add_field(name="Points Earned", value=str(earned_points))
     if auto:
         embed.add_field(name="Reason", value=reason)
-
-    # Log the end to the log channel
     await send_log_embed(embed=embed)
 
-    # If auto-ended, DM the user
     if auto:
         try:
-            dm = Embed(
-                title="Duty Auto-Ended",
-                description="Your duty was automatically ended.",
-                color=discord.Color.red()
-            )
+            dm = Embed(title="Duty Auto-Ended", description="Your duty was automatically ended.", color=discord.Color.red())
             dm.add_field(name="Reason", value=reason, inline=False)
-            dm.add_field(name="Total Duration", value=str(datetime.utcnow() - duty['start_time'])[:-7])
+            dm.add_field(name="Total Duration", value=str(total_time)[:-7])
+            dm.add_field(name="Points Earned", value=str(earned_points))
             await user.send(embed=dm)
         except Exception as e:
             print(f"Failed to DM user {user}: {e}")
-
-
 
 # --- Log Embed Sender ---
 async def send_log_embed(title=None, user=None, fields=None, embed=None):
