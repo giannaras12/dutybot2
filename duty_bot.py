@@ -236,7 +236,7 @@ async def resetpoints(interaction: Interaction):
 
 # --- Reminder Logic ---
 async def schedule_reminder(user):
-    await asyncio.sleep(random.randint(180, 300))
+    await asyncio.sleep(random.randint(1200, 1800))
     if user.id not in ACTIVE_DUTIES:
         return
 
