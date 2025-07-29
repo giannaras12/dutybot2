@@ -291,7 +291,7 @@ async def end_duty_session(user, auto=True, reason="No response"):
     embed.add_field(name="User", value=f"{user} ({user.id})")
     embed.add_field(name="Start Time", value=duty['start_time'].strftime('%A, %d %B %Y %H:%M %p'))
     embed.add_field(name="End Time", value=datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p'))
-       total_minutes = int(total_time.total_seconds() // 60)
+    total_minutes = int(total_time.total_seconds() // 60)
     embed.add_field(name="Total Duration", value=f"{total_minutes} minutes")
     embed.add_field(name="Times Continued", value=str(duty['continues']))
     embed.add_field(name="Points Earned", value=str(earned_points))
