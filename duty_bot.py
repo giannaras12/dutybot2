@@ -145,24 +145,28 @@ async def send_log_embed(title=None, user=None, fields=None, embed=None):
     """Send embed to log channel and print to console"""
     log_channel = bot.get_channel(LOG_CHANNEL_ID)
     if not log_channel:
-        return
+        try:
+            log_channel = await bot.fetch_channel(LOG_CHANNEL_ID)
+        except Exception as e:
+            log_to_console("LOG_CHANNEL_FETCH_FAILED", details={"Error": str(e)})
+            return
 
     if embed is None:
         embed = Embed(title=title, color=discord.Color.blue())
         if fields:
             for key, value in fields.items():
                 embed.add_field(name=key, value=value, inline=False)
-    
+
     # Log to console
     if user:
         log_to_console(title or "LOG_EVENT", user, fields)
     else:
         log_to_console(title or "LOG_EVENT", details=fields)
-    
+
     try:
         await log_channel.send(embed=embed)
     except Exception as e:
-        print(f"Failed to send log embed: {e}")
+        log_to_console("LOG_SEND_FAILED", details={"Error": str(e)})
 
 # --- Commands ---
 @tree.command(name="addmod", description="Add a moderator who can use duty commands (Admin only)")
@@ -425,15 +429,18 @@ async def end_duty_session(user, auto=True, reason="No response"):
     embed.add_field(name="Points Earned", value=str(earned_points))
     if auto:
         embed.add_field(name="Reason", value=reason)
+
     await send_log_embed(embed=embed)
 
+    # Try to DM the user
     if auto:
         try:
+            full_user = await bot.fetch_user(user.id)
             dm = Embed(title="Duty Auto-Ended", description="Your duty was automatically ended.", color=discord.Color.red())
             dm.add_field(name="Reason", value=reason, inline=False)
             dm.add_field(name="Total Duration", value=str(total_time)[:-7])
             dm.add_field(name="Points Earned", value=str(earned_points))
-            await user.send(embed=dm)
+            await full_user.send(embed=dm)
         except Exception as e:
             log_to_console("DM_FAILED", user, {"Error": str(e)})
 
