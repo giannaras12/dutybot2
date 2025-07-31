@@ -26,7 +26,7 @@ def keep_alive():
 AUTHORIZED_MODS_FILE = "authorized_mods.json"
 POINTS_FILE = "points.json"
 ACTIVE_DUTIES = {}
-REMINDER_TASKS = {}
+REMINDER_TASKS = {}  # <-- Added to track running reminder tasks
 MAX_DUTY_DURATION = timedelta(hours=12)
 
 MOD_ROLE_ID = 1399148894566354985
@@ -206,13 +206,13 @@ async def dutystart(interaction: Interaction):
         "Start Time": datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p')
     })
 
-    # Cancel existing reminder task if any
-existing_task = REMINDER_TASKS.get(interaction.user.id)
-if existing_task and not existing_task.done():
-    existing_task.cancel()
+    # Cancel any previous reminder task for this user
+    existing_task = REMINDER_TASKS.get(interaction.user.id)
+    if existing_task and not existing_task.done():
+        existing_task.cancel()
 
-# Start and store the new reminder task
-REMINDER_TASKS[interaction.user.id] = asyncio.create_task(schedule_reminder(interaction.user))
+    # Start a new reminder task
+    REMINDER_TASKS[interaction.user.id] = asyncio.create_task(schedule_reminder(interaction.user))
 
 @tree.command(name="endduty", description="End your current duty shift")
 async def endduty(interaction: Interaction):
@@ -243,46 +243,49 @@ async def resetpoints(interaction: Interaction):
 
 # --- Reminder Logic ---
 async def schedule_reminder(user):
-    await asyncio.sleep(random.randint(1200, 1800))
-    if user.id not in ACTIVE_DUTIES:
-        return
-
-    view = ReminderView(user.id)
-    embed = Embed(
-        title="Duty Reminder",
-        description=f"{user.mention}, you are currently on duty. Please confirm.",
-        color=discord.Color.orange()
-    )
-    embed.add_field(name="Reminder", value=f"#{ACTIVE_DUTIES[user.id]['continues'] + 1}")
-    embed.add_field(name="Time", value=datetime.utcnow().strftime('%H:%M:%S'))
-
     try:
-        await user.send(embed=embed, view=view)
-        await send_log_embed("Reminder Sent", user, {
-            "User": f"{user} ({user.id})",
-            "Reminder Time": datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p'),
-            "Reminder #": ACTIVE_DUTIES[user.id]['continues'] + 1
-        })
-    except Exception as e:
-        print(f"Failed to DM user {user}: {e}")
-        return
+        await asyncio.sleep(random.randint(1200, 1800))
+        if user.id not in ACTIVE_DUTIES:
+            return
 
-    await view.wait()
+        view = ReminderView(user.id)
+        embed = Embed(
+            title="Duty Reminder",
+            description=f"{user.mention}, you are currently on duty. Please confirm.",
+            color=discord.Color.orange()
+        )
+        embed.add_field(name="Reminder", value=f"#{ACTIVE_DUTIES[user.id]['continues'] + 1}")
+        embed.add_field(name="Time", value=datetime.utcnow().strftime('%H:%M:%S'))
 
-    if not view.responded:
-        await end_duty_session(user, auto=True, reason="No response to reminder")
-    elif user.id in ACTIVE_DUTIES:
-        total_time = datetime.utcnow() - ACTIVE_DUTIES[user.id]['start_time']
-        if total_time >= MAX_DUTY_DURATION:
-            await end_duty_session(user, auto=True, reason="12-hour limit reached")
-        else:
-            await schedule_reminder(user)
+        try:
+            await user.send(embed=embed, view=view)
+            await send_log_embed("Reminder Sent", user, {
+                "User": f"{user} ({user.id})",
+                "Reminder Time": datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p'),
+                "Reminder #": ACTIVE_DUTIES[user.id]['continues'] + 1
+            })
+        except Exception as e:
+            print(f"Failed to DM user {user}: {e}")
+            return
+
+        await view.wait()
+
+        if not view.responded:
+            await end_duty_session(user, auto=True, reason="No response to reminder")
+        elif user.id in ACTIVE_DUTIES:
+            total_time = datetime.utcnow() - ACTIVE_DUTIES[user.id]['start_time']
+            if total_time >= MAX_DUTY_DURATION:
+                await end_duty_session(user, auto=True, reason="12-hour limit reached")
+            else:
+                REMINDER_TASKS[user.id] = asyncio.create_task(schedule_reminder(user))
+    except asyncio.CancelledError:
+        print(f"Reminder task for {user} was cancelled.")
 
 async def end_duty_session(user, auto=True, reason="No response"):
     if user.id not in ACTIVE_DUTIES:
         return
 
-    # Cancel any running reminder task
+    # Cancel reminder task
     reminder_task = REMINDER_TASKS.pop(user.id, None)
     if reminder_task and not reminder_task.done():
         reminder_task.cancel()
@@ -303,7 +306,6 @@ async def end_duty_session(user, auto=True, reason="No response"):
     embed.add_field(name="User", value=f"{user} ({user.id})")
     embed.add_field(name="Start Time", value=duty['start_time'].strftime('%A, %d %B %Y %H:%M %p'))
     embed.add_field(name="End Time", value=datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p'))
-    total_minutes = int(total_time.total_seconds() // 60)
     embed.add_field(name="Total Duration", value=f"{total_minutes} minutes")
     embed.add_field(name="Times Continued", value=str(duty['continues']))
     embed.add_field(name="Points Earned", value=str(earned_points))
