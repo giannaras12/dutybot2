@@ -279,13 +279,13 @@ async def schedule_reminder(user):
             await schedule_reminder(user)
 
 async def end_duty_session(user, auto=True, reason="No response"):
-   if user.id not in ACTIVE_DUTIES:
-    return
+    if user.id not in ACTIVE_DUTIES:
+        return
 
-# Cancel any running reminder task
-reminder_task = REMINDER_TASKS.pop(user.id, None)
-   if reminder_task and not reminder_task.done():
-    reminder_task.cancel()
+    # Cancel any running reminder task
+    reminder_task = REMINDER_TASKS.pop(user.id, None)
+    if reminder_task and not reminder_task.done():
+        reminder_task.cancel()
 
     duty = ACTIVE_DUTIES.pop(user.id)
     total_time = datetime.utcnow() - duty['start_time']
