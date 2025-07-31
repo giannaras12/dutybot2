@@ -434,15 +434,26 @@ async def end_duty_session(user, auto=True, reason="No response"):
 
     # Try to DM the user
     if auto:
-        try:
-            full_user = await bot.fetch_user(user.id)
-            dm = Embed(title="Duty Auto-Ended", description="Your duty was automatically ended.", color=discord.Color.red())
-            dm.add_field(name="Reason", value=reason, inline=False)
-            dm.add_field(name="Total Duration", value=str(total_time)[:-7])
-            dm.add_field(name="Points Earned", value=str(earned_points))
-            await full_user.send(embed=dm)
-        except Exception as e:
-            log_to_console("DM_FAILED", user, {"Error": str(e)})
+    try:
+        # Fetch the full user object (ensures we can DM them)
+        full_user = await bot.fetch_user(user.id)
+
+        dm = Embed(
+            title="Duty Auto-Ended",
+            description="Your duty was automatically ended.",
+            color=discord.Color.red()
+        )
+        dm.add_field(name="Reason", value=reason, inline=False)
+        dm.add_field(name="Total Duration", value=str(total_time)[:-7])
+        dm.add_field(name="Points Earned", value=str(earned_points))
+
+        await full_user.send(embed=dm)
+        log_to_console("DM_SENT", full_user)
+
+    except Exception as e:
+        log_to_console("DM_FAILED", user, {"Error": str(e)})
+        import traceback
+        traceback.print_exc()
 
 # --- Bot Events ---
 @bot.event
