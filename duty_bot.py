@@ -206,7 +206,13 @@ async def dutystart(interaction: Interaction):
         "Start Time": datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p')
     })
 
-    await schedule_reminder(interaction.user)
+    # Cancel existing reminder task if any
+existing_task = REMINDER_TASKS.get(interaction.user.id)
+if existing_task and not existing_task.done():
+    existing_task.cancel()
+
+# Start and store the new reminder task
+REMINDER_TASKS[interaction.user.id] = asyncio.create_task(schedule_reminder(interaction.user))
 
 @tree.command(name="endduty", description="End your current duty shift")
 async def endduty(interaction: Interaction):
