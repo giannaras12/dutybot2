@@ -417,6 +417,7 @@ async def end_duty_session(user, auto=True, reason="No response"):
         "Total Points": points[uid]
     })
 
+    # Create log embed
     embed = Embed(
         title="Duty Auto-Ended" if auto else "Duty Ended",
         color=discord.Color.red()
@@ -430,11 +431,15 @@ async def end_duty_session(user, auto=True, reason="No response"):
     if auto:
         embed.add_field(name="Reason", value=reason)
 
-    await send_log_embed(embed=embed)
+    # --- FIX: Wrap send_log_embed in try-except ---
+    try:
+        await send_log_embed(embed=embed)
+    except Exception as e:
+        log_to_console("SEND_LOG_FAILED", user, {"Error": str(e)})
 
+    # --- FIX: Wrap DM logic in try-except ---
     if auto:
         try:
-            # Ensure we have the full user object to DM them
             full_user = await bot.fetch_user(user.id)
 
             dm = Embed(
