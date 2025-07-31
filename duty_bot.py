@@ -257,7 +257,7 @@ async def schedule_reminder(user):
     while user.id in ACTIVE_DUTIES:
         try:
             # Wait for 20-30 minutes randomly
-            wait_time = random.randint(1200, 1800)  # 20-30 minutes in seconds
+            wait_time = random.randint(180, 300)  # 20-30 minutes in seconds
             await asyncio.sleep(wait_time)
             
             if user.id not in ACTIVE_DUTIES:
