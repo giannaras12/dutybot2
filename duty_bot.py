@@ -30,9 +30,9 @@ ACTIVE_DUTIES = {}
 REMINDER_TASKS = {}  # Track reminder tasks to prevent duplicates
 MAX_DUTY_DURATION = timedelta(hours=12)
 
-MOD_ROLE_ID = 1386555863728390229
+MOD_ROLE_ID = 1399148894566354985
 ADMIN_ROLE_ID = MOD_ROLE_ID
-LOG_CHANNEL_ID = 1386555864831365197
+LOG_CHANNEL_ID = 1399171018630889472
 
 # --- Bot setup ---
 intents = discord.Intents.default()
@@ -255,7 +255,7 @@ async def schedule_reminder(user):
     while user.id in ACTIVE_DUTIES:
         try:
             # Wait for 20-30 minutes randomly
-            wait_time = random.randint(1200, 1800)  # 20-30 minutes in seconds
+            wait_time = random.randint(1200, 1800)  
             await asyncio.sleep(wait_time)
             
             if user.id not in ACTIVE_DUTIES:
