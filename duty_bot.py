@@ -26,6 +26,7 @@ def keep_alive():
 AUTHORIZED_MODS_FILE = "authorized_mods.json"
 POINTS_FILE = "points.json"
 ACTIVE_DUTIES = {}
+REMINDER_TASKS = {}
 MAX_DUTY_DURATION = timedelta(hours=12)
 
 MOD_ROLE_ID = 1399148894566354985
