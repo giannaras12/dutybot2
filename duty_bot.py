@@ -390,8 +390,8 @@ async def schedule_reminder(user):
         return
 
 async def end_duty_session(user, auto=True, reason="No response"):
-    """End a duty session and clean up"""
     if user.id not in ACTIVE_DUTIES:
+        log_to_console("END_DUTY_ABORTED", user, {"Reason": "Not in ACTIVE_DUTIES"})
         return
 
     # Cancel reminder task
@@ -401,7 +401,7 @@ async def end_duty_session(user, auto=True, reason="No response"):
         log_to_console("REMINDER_TASK_CANCELLED", user, {"Reason": "Duty ended"})
 
     duty = ACTIVE_DUTIES.pop(user.id)
-    total_time = datetime.utcnow() - duty['start_time']
+    total_time = datetime.now(timezone.utc) - duty['start_time']
     total_minutes = int(total_time.total_seconds() // 60)
     earned_points = total_minutes // 4
 
@@ -418,28 +418,35 @@ async def end_duty_session(user, auto=True, reason="No response"):
     })
 
     # Create log embed
-    embed = Embed(
-        title="Duty Auto-Ended" if auto else "Duty Ended",
-        color=discord.Color.red()
-    )
-    embed.add_field(name="User", value=f"{user} ({user.id})")
-    embed.add_field(name="Start Time", value=duty['start_time'].strftime('%A, %d %B %Y %H:%M %p'))
-    embed.add_field(name="End Time", value=datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p'))
-    embed.add_field(name="Total Duration", value=f"{total_minutes} minutes")
-    embed.add_field(name="Times Continued", value=str(duty['continues']))
-    embed.add_field(name="Points Earned", value=str(earned_points))
-    if auto:
-        embed.add_field(name="Reason", value=reason)
-
-    # --- FIX: Wrap send_log_embed in try-except ---
     try:
+        log_to_console("BUILDING_LOG_EMBED", user)
+        embed = Embed(
+            title="Duty Auto-Ended" if auto else "Duty Ended",
+            color=discord.Color.red()
+        )
+        embed.add_field(name="User", value=f"{user} ({user.id})")
+        embed.add_field(name="Start Time", value=duty['start_time'].strftime('%A, %d %B %Y %H:%M %p'))
+        embed.add_field(name="End Time", value=datetime.now(timezone.utc).strftime('%A, %d %B %Y %H:%M %p'))
+        embed.add_field(name="Total Duration", value=f"{total_minutes} minutes")
+        embed.add_field(name="Times Continued", value=str(duty['continues']))
+        embed.add_field(name="Points Earned", value=str(earned_points))
+        if auto:
+            embed.add_field(name="Reason", value=reason)
+    except Exception as e:
+        log_to_console("EMBED_BUILD_FAILED", user, {"Error": str(e)})
+
+    # Send log embed
+    try:
+        log_to_console("SENDING_LOG_EMBED", user)
         await send_log_embed(embed=embed)
+        log_to_console("LOG_EMBED_SENT", user)
     except Exception as e:
         log_to_console("SEND_LOG_FAILED", user, {"Error": str(e)})
 
-    # --- FIX: Wrap DM logic in try-except ---
+    # Send DM
     if auto:
         try:
+            log_to_console("SENDING_DM", user)
             full_user = await bot.fetch_user(user.id)
 
             dm = Embed(
@@ -453,7 +460,6 @@ async def end_duty_session(user, auto=True, reason="No response"):
 
             await full_user.send(embed=dm)
             log_to_console("DM_SENT", full_user)
-
         except Exception as e:
             log_to_console("DM_FAILED", user, {"Error": str(e)})
             import traceback
