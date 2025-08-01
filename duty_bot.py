@@ -4,7 +4,7 @@ from discord import app_commands, Interaction, Embed, ButtonStyle
 from discord.ui import View, Button
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import random
 from flask import Flask
 from threading import Thread
@@ -44,7 +44,7 @@ client = bot
 # --- Logging Helper ---
 def log_to_console(event_type, user=None, details=None):
     """Log events to console for debugging"""
-    timestamp = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+    timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
     log_message = f"[{timestamp}] {event_type}"
     
     if user:
@@ -112,19 +112,19 @@ class ReminderView(View):
         self.responded = True
         duty = ACTIVE_DUTIES.get(self.user_id)
         if duty:
-            duty['last_continue'] = datetime.utcnow()
+            duty['last_continue'] = datetime.now(timezone.utc)
             duty['continues'] += 1
             
             log_to_console("DUTY_CONTINUED", interaction.user, {
                 "Continue Count": duty['continues'],
-                "Total Duration": str(datetime.utcnow() - duty['start_time'])[:-7]
+                "Total Duration": str(datetime.now(timezone.utc) - duty['start_time'])[:-7]
             })
             
             await send_log_embed("Duty Continued", interaction.user, {
                 "User": f"{interaction.user} ({interaction.user.id})",
-                "Continue Time": datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p'),
+                "Continue Time": datetime.now(timezone.utc).strftime('%A, %d %B %Y %H:%M %p'),
                 "Continue Count": duty['continues'],
-                "Total Duration": str(datetime.utcnow() - duty['start_time'])[:-7]
+                "Total Duration": str(datetime.now(timezone.utc) - duty['start_time'])[:-7]
             })
         
         await interaction.response.send_message("Duty continued.", ephemeral=True)
@@ -187,7 +187,7 @@ async def end_duty_session(user, auto=False, reason=None):
         return
 
     duty_data = ACTIVE_DUTIES[user.id]
-    duration = datetime.utcnow() - duty_data["start_time"]
+    duration = datetime.now(timezone.utc) - duty_data["start_time"]
     
     # Calculate points (1 point per 4 minutes)
     total_minutes = int(duration.total_seconds() // 60)
@@ -212,7 +212,7 @@ async def end_duty_session(user, auto=False, reason=None):
     
     log_fields = {
         "User": f"{user} ({user.id})",
-        "End Time": datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p'),
+        "End Time": datetime.now(timezone.utc).strftime('%A, %d %B %Y %H:%M %p'),
         "Duration": str(duration)[:-7],
         "Points Earned": awarded_points,
         "Total Points": points[user_id_str],
@@ -262,7 +262,7 @@ async def schedule_reminder(user):
                 break
                 
             duty_data = ACTIVE_DUTIES[user.id]
-            current_duration = datetime.utcnow() - duty_data["start_time"]
+            current_duration = datetime.now(timezone.utc) - duty_data["start_time"]
             
             # Check if duty has exceeded maximum duration
             if current_duration >= MAX_DUTY_DURATION:
@@ -293,7 +293,7 @@ async def schedule_reminder(user):
                     "User": f"{user} ({user.id})",
                     "Duration": str(current_duration)[:-7],
                     "Continue Count": duty_data['continues'],
-                    "Time": datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p')
+                    "Time": datetime.now(timezone.utc).strftime('%A, %d %B %Y %H:%M %p')
                 })
             except discord.Forbidden:
                 log_to_console("REMINDER_FAILED", user, {"Reason": "DMs disabled"})
@@ -403,8 +403,8 @@ async def dutystart(interaction: Interaction):
 
     ACTIVE_DUTIES[interaction.user.id] = {
         "user": interaction.user,
-        "start_time": datetime.utcnow(),
-        "last_continue": datetime.utcnow(),
+        "start_time": datetime.now(timezone.utc),
+        "last_continue": datetime.now(timezone.utc),
         "continues": 0
     }
 
@@ -415,13 +415,13 @@ async def dutystart(interaction: Interaction):
     )
     embed.add_field(name="User", value=interaction.user.name)
     embed.add_field(name="User ID", value=str(interaction.user.id))
-    embed.add_field(name="Start Time", value=datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p'))
+    embed.add_field(name="Start Time", value=datetime.now(timezone.utc).strftime('%A, %d %B %Y %H:%M %p'))
 
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
     await send_log_embed("Duty Started", interaction.user, {
         "User": f"{interaction.user} ({interaction.user.id})",
-        "Start Time": datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p')
+        "Start Time": datetime.now(timezone.utc).strftime('%A, %d %B %Y %H:%M %p')
     })
 
     # Start reminder task
@@ -494,7 +494,7 @@ async def addpoints(interaction: Interaction, user_id: str, points_to_add: int):
             "Target User": f"<@{uid}> ({uid})",
             "Points Added": points_to_add,
             "New Total": points[uid],
-            "Time": datetime.utcnow().strftime('%A, %d %B %Y %H:%M %p')
+            "Time": datetime.now(timezone.utc).strftime('%A, %d %B %Y %H:%M %p')
         })
         
         await interaction.response.send_message(
@@ -554,6 +554,22 @@ async def forceend(interaction: Interaction, user_id: str):
         
     except ValueError:
         await interaction.response.send_message("Invalid user ID.", ephemeral=True)
+
+# --- Error Handling ---
+@bot.event
+async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+    """Handle application command errors"""
+    log_to_console("COMMAND_ERROR", interaction.user if hasattr(interaction, 'user') else None, {
+        "Command": interaction.command.name if interaction.command else "Unknown",
+        "Error": str(error),
+        "Error Type": type(error).__name__
+    })
+    
+    if not interaction.response.is_done():
+        await interaction.response.send_message(
+            f"An error occurred: {str(error)}", 
+            ephemeral=True
+        )
 
 # --- Events ---
 @bot.event
